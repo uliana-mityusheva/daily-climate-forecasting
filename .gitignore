@@ -235,6 +235,6 @@ wandb/
 # Artifacts (models, checkpoints)
 artifacts/
 
-# reports artifacts
-reports/*
-!reports/metrics.json
+# reports / plots (generated artifacts, must not be in git)
+reports/
+plots/
