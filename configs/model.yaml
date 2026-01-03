@@ -1,0 +1,7 @@
+# Model hyperparameters
+input_size: 6
+hidden_size: 64
+num_layers: 1
+dropout: 0.0
+bidirectional: false
+out_size: 1

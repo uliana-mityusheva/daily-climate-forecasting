@@ -1,0 +1,9 @@
+# Training hyperparameters
+epochs: 50
+lr: 0.001
+weight_decay: 0.0
+
+save_dir: artifacts
+ckpt_name: model_best.pt
+
+early_stopping_patience: 10

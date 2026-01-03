@@ -1,0 +1,3 @@
+# Inference configuration
+model_path: artifacts/model_best.pt
+plot: true

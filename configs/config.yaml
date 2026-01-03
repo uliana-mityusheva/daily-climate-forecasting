@@ -1,0 +1,8 @@
+defaults:
+  - data: data
+  - model: model
+  - train: train
+  - predict: predict
+  - _self_
+
+# Global config anchor for future extensions (logging/serve, etc.)
