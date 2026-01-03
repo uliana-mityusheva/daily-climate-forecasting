@@ -11,7 +11,7 @@ class ModelConfig:
     input_size: int = 6          # month, day, humidity, wind_speed, meanpressure, ratio
     hidden_size: int = 64
     num_layers: int = 1
-    dropout: float = 0.0         # применяется только если num_layers > 1
+    dropout: float = 0.0         # applied only if num_layers > 1
     bidirectional: bool = False
 
     out_size: int = 1            # meantemp per timestep

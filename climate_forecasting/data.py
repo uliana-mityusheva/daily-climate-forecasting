@@ -2,19 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Dict, Any
 
+import joblib
 import numpy as np
 import pandas as pd
-import joblib
 import torch
-from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import MinMaxScaler
+from torch.utils.data import Dataset, DataLoader
 
 
 DATE_COL = "date"
 
-# Как в ноутбуке: month, day + исходные колонки + engineered ratio + meantemp
+# Kaggle-style columns / features
 COL_MONTH = "month"
 COL_DAY = "day"
 COL_HUM = "humidity"
@@ -24,8 +24,8 @@ COL_RATIO = "humidity_pressure_ratio"
 COL_TARGET = "meantemp"
 
 ALL_COLS = (COL_MONTH, COL_DAY, COL_HUM, COL_WIND, COL_PRESS, COL_RATIO, COL_TARGET)
-FEATURE_COLS = (COL_MONTH, COL_DAY, COL_HUM, COL_WIND, COL_PRESS, COL_RATIO)  # 6 фич
-TARGET_COL = COL_TARGET  # 1 таргет
+FEATURE_COLS = (COL_MONTH, COL_DAY, COL_HUM, COL_WIND, COL_PRESS, COL_RATIO)  # 6
+TARGET_COL = COL_TARGET  # 1
 
 TARGET_INDEX = ALL_COLS.index(TARGET_COL)  # 6
 N_FEATURES = len(FEATURE_COLS)  # 6
@@ -33,16 +33,20 @@ N_FEATURES = len(FEATURE_COLS)  # 6
 
 @dataclass(frozen=True)
 class DataConfig:
+    """Configuration container for the data pipeline."""
     raw_path: Path = Path("data/raw/daily_climate_data.csv")
     processed_dir: Path = Path("data/processed")
 
-    lookback: int = 7  # в ноутбуке lookback=7
+    lookback: int = 7
     train_ratio: float = 0.8
-    val_ratio: float = 0.1  # train/val/test по времени
+    val_ratio: float = 0.1
 
     batch_size: int = 32
-    num_workers: int = 0  # macOS/M2 обычно лучше 0
+    num_workers: int = 0
     pin_memory: bool = False
+
+    # For time-series, do not shuffle by default.
+    shuffle_train: bool = False
 
     save_scaler: bool = True
     scaler_name: str = "minmax_scaler.joblib"
@@ -51,9 +55,8 @@ class DataConfig:
 class ClimateSeq2SeqDataset(Dataset):
     """
     X: [lookback, 6]
-    y: [lookback, 1]  (последовательность meantemp как в ноутбуке)
+    y: [lookback, 1]  (sequence of meantemp)
     """
-
     def __init__(self, X: np.ndarray, y: np.ndarray):
         assert X.ndim == 3 and X.shape[2] == N_FEATURES, f"X must be [N,T,6], got {X.shape}"
         assert y.ndim == 3 and y.shape[2] == 1, f"y must be [N,T,1], got {y.shape}"
@@ -77,27 +80,30 @@ def _read_raw_df(path: Path) -> pd.DataFrame:
     df[DATE_COL] = pd.to_datetime(df[DATE_COL], errors="raise")
     df = df.sort_values(DATE_COL).reset_index(drop=True)
 
-    # простые sanity checks
     if df[DATE_COL].isna().any():
         raise ValueError("NaT in date column after parsing.")
-    df = df.drop_duplicates(subset=[DATE_COL], keep="last").reset_index(drop=True)
 
+    # If duplicate dates exist, keep the last value
+    df = df.drop_duplicates(subset=[DATE_COL], keep="last").reset_index(drop=True)
     return df
 
 
 def _feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
-    # month/day как в ноутбуке (year можно добавить, но в ноутбуке в модель он не пошел)
+    df = df.copy()
+
+    # Extract month/day from date
     df[COL_MONTH] = df[DATE_COL].dt.month.astype(np.int64)
     df[COL_DAY] = df[DATE_COL].dt.day.astype(np.int64)
 
-    # ratio как в ноутбуке
+    # Humidity/pressure ratio with safe handling of inf/nan
     if COL_PRESS not in df.columns or COL_HUM not in df.columns:
         raise ValueError(f"Need columns '{COL_HUM}' and '{COL_PRESS}' for ratio feature.")
+
     df[COL_RATIO] = df[COL_HUM] / df[COL_PRESS].replace(0, np.nan)
+    df[COL_RATIO] = df[COL_RATIO].replace([np.inf, -np.inf], np.nan)
 
-    # если где-то meanpressure=0 -> ratio станет nan
+    # Drop rows where ratio is undefined
     df = df.dropna(subset=[COL_RATIO]).reset_index(drop=True)
-
     return df
 
 
@@ -115,21 +121,26 @@ def _time_splits(n: int, train_ratio: float, val_ratio: float) -> Tuple[slice, s
     return slice(0, train_end), slice(train_end, val_end), slice(val_end, n)
 
 
+def _ensure_enough_rows(name: str, n: int, lookback: int) -> None:
+    if n < lookback:
+        raise ValueError(
+            f"{name} split too small for lookback={lookback}: n={n}. "
+            f"Increase split size or reduce lookback."
+        )
+
+
 def _fit_scaler(train_values: np.ndarray) -> MinMaxScaler:
     scaler = MinMaxScaler()
     scaler.fit(train_values)
     return scaler
 
 
-def create_windows_seq2seq(
-    series_scaled: np.ndarray,
-    lookback: int,
-) -> Tuple[np.ndarray, np.ndarray]:
+def create_windows_seq2seq(series_scaled: np.ndarray, lookback: int) -> Tuple[np.ndarray, np.ndarray]:
     """
-    series_scaled: [N, 7] в порядке ALL_COLS, уже заскейлено MinMaxScaler
-    Возвращает:
-      X: [M, lookback, 6]  (все колонки кроме meantemp)
-      y: [M, lookback, 1]  (meantemp как последовательность)
+    series_scaled: [N, 7] aligned with ALL_COLS, already scaled by MinMaxScaler
+    Returns:
+      X: [M, lookback, 6]
+      y: [M, lookback, 1]
     """
     if series_scaled.ndim != 2 or series_scaled.shape[1] != len(ALL_COLS):
         raise ValueError(f"Expected [N,7] array aligned with ALL_COLS, got {series_scaled.shape}")
@@ -142,13 +153,12 @@ def create_windows_seq2seq(
     X = np.zeros((m, lookback, N_FEATURES), dtype=np.float32)
     y = np.zeros((m, lookback, 1), dtype=np.float32)
 
-    # фичи = первые 6 колонок
     feat_mat = series_scaled[:, :N_FEATURES]
-    targ_vec = series_scaled[:, TARGET_INDEX]  # meantemp
+    targ_vec = series_scaled[:, TARGET_INDEX]
 
     for i in range(m):
-        X[i] = feat_mat[i : i + lookback]
-        y[i, :, 0] = targ_vec[i : i + lookback]
+        X[i] = feat_mat[i: i + lookback]
+        y[i, :, 0] = targ_vec[i: i + lookback]
 
     return X, y
 
@@ -157,18 +167,21 @@ def prepare_datasets(cfg: DataConfig) -> Tuple[ClimateSeq2SeqDataset, ClimateSeq
     df = _read_raw_df(cfg.raw_path)
     df = _feature_engineering(df)
 
-    missing = [c for c in (COL_HUM, COL_WIND, COL_PRESS, COL_TARGET) if c not in df.columns]
+    required = (COL_HUM, COL_WIND, COL_PRESS, COL_TARGET)
+    missing = [c for c in required if c not in df.columns]
     if missing:
         raise ValueError(f"Missing required columns: {missing}. Available: {df.columns.tolist()}")
 
-    df = df.loc[:, (DATE_COL, COL_MONTH, COL_DAY, COL_HUM, COL_WIND, COL_PRESS, COL_RATIO, COL_TARGET)].copy()
+    # IMPORTANT: enforce column order to match ALL_COLS
+    df = df.loc[:, (DATE_COL, *ALL_COLS)].copy()
 
-    # numpy [N,7] в порядке ALL_COLS
-    series = df.loc[:, ALL_COLS].to_numpy(dtype=np.float32)
-
+    series = df.loc[:, ALL_COLS].to_numpy(dtype=np.float32)  # [N,7]
     train_sl, val_sl, test_sl = _time_splits(len(series), cfg.train_ratio, cfg.val_ratio)
 
-    # scaler fit только на train (как правильно для ts)
+    _ensure_enough_rows("train", train_sl.stop - train_sl.start, cfg.lookback)
+    _ensure_enough_rows("val", val_sl.stop - val_sl.start, cfg.lookback)
+    _ensure_enough_rows("test", test_sl.stop - test_sl.start, cfg.lookback)
+
     scaler = _fit_scaler(series[train_sl])
     series_scaled = scaler.transform(series).astype(np.float32)
 
@@ -184,7 +197,6 @@ def prepare_datasets(cfg: DataConfig) -> Tuple[ClimateSeq2SeqDataset, ClimateSeq
             cfg.processed_dir / cfg.scaler_name,
         )
 
-    # окна режем отдельно по сплитам (без протечки через границы)
     X_train, y_train = create_windows_seq2seq(series_scaled[train_sl], cfg.lookback)
     X_val, y_val = create_windows_seq2seq(series_scaled[val_sl], cfg.lookback)
     X_test, y_test = create_windows_seq2seq(series_scaled[test_sl], cfg.lookback)
@@ -199,13 +211,10 @@ def prepare_datasets(cfg: DataConfig) -> Tuple[ClimateSeq2SeqDataset, ClimateSeq
 def create_dataloaders(cfg: DataConfig) -> Tuple[DataLoader, DataLoader, DataLoader]:
     train_ds, val_ds, test_ds = prepare_datasets(cfg)
 
-    # В ноутбуке shuffle=True, но это time series.
-    # Если хочешь 1-в-1 как в ноутбуке — поставь shuffle=True на train.
-    # Для “правильного” TS — shuffle=False.
     train_loader = DataLoader(
         train_ds,
         batch_size=cfg.batch_size,
-        shuffle=True,  # ближе к ноутбуку
+        shuffle=cfg.shuffle_train,
         num_workers=cfg.num_workers,
         pin_memory=cfg.pin_memory,
         drop_last=False,
@@ -226,15 +235,17 @@ def create_dataloaders(cfg: DataConfig) -> Tuple[DataLoader, DataLoader, DataLoa
         pin_memory=cfg.pin_memory,
         drop_last=False,
     )
-
     return train_loader, val_loader, test_loader
 
 
-def load_scaler(processed_dir: Path = Path("data/processed"), scaler_name: str = "minmax_scaler.joblib") -> dict:
+def load_scaler(processed_dir: Path = Path("data/processed"), scaler_name: str = "minmax_scaler.joblib") -> Dict[str, Any]:
     path = processed_dir / scaler_name
     if not path.exists():
         raise FileNotFoundError(f"Scaler not found: {path}")
-    return joblib.load(path)
+    pack = joblib.load(path)
+    if not isinstance(pack, dict) or "scaler" not in pack:
+        raise ValueError(f"Unexpected scaler pack format in {path}. Expected dict with key 'scaler'.")
+    return pack
 
 
 def inverse_transform_meantemp(
@@ -243,17 +254,12 @@ def inverse_transform_meantemp(
     scaler: MinMaxScaler,
 ) -> np.ndarray:
     """
-    Удобная утилита для перевода предсказаний meantemp обратно в градусы,
-    когда scaler обучен на всех 7 колонках (как в ноутбуке).
-
-    meantemp_scaled: [...,] или [...,1] — значения в [0,1]
-    reference_scaled_rows: [K,7] — любые заскейленные строки (нужны, чтобы собрать 7-мерный вектор)
-    scaler: тот же MinMaxScaler
-
-    Возвращает: meantemp в исходной шкале, shape [K]
+    Convert meantemp from scaled [0,1] back to original units (°C),
+    when scaler was fit on ALL_COLS (7-dim).
     """
     mt = meantemp_scaled.reshape(-1)
-    ref = reference_scaled_rows.copy()
+    ref = np.asarray(reference_scaled_rows, dtype=np.float32).copy()
+
     if ref.ndim != 2 or ref.shape[1] != len(ALL_COLS):
         raise ValueError(f"reference_scaled_rows must be [K,7], got {ref.shape}")
     if ref.shape[0] != mt.shape[0]:
