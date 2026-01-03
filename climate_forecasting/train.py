@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict
 
+import hydra
 import torch
+from hydra.utils import to_absolute_path
+from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torch.optim import Adam
 
@@ -143,15 +146,56 @@ def train_one_epoch(
     }
 
 
-def main() -> None:
-    # Configs
-    data_cfg = DataConfig()
-    ensure_raw_data(
-        public_link=data_cfg.data_url,
-        dst=data_cfg.raw_path,
+def _build_data_config(cfg: DictConfig) -> DataConfig:
+    """Create DataConfig from Hydra config with proper Path types and absolute paths."""
+    return DataConfig(
+        raw_path=Path(to_absolute_path(cfg.data.raw_path)),
+        data_url=str(cfg.data.data_url),
+        processed_dir=Path(to_absolute_path(cfg.data.processed_dir)),
+        lookback=int(cfg.data.lookback),
+        train_ratio=float(cfg.data.train_ratio),
+        val_ratio=float(cfg.data.val_ratio),
+        batch_size=int(cfg.data.batch_size),
+        num_workers=int(cfg.data.num_workers),
+        pin_memory=bool(cfg.data.pin_memory),
+        shuffle_train=bool(cfg.data.shuffle_train),
+        save_scaler=bool(cfg.data.save_scaler),
+        scaler_name=str(cfg.data.scaler_name),
     )
-    model_cfg = ModelConfig()
-    train_cfg = TrainConfig()
+
+
+def _build_model_config(cfg: DictConfig) -> ModelConfig:
+    return ModelConfig(
+        input_size=int(cfg.model.input_size),
+        hidden_size=int(cfg.model.hidden_size),
+        num_layers=int(cfg.model.num_layers),
+        dropout=float(cfg.model.dropout),
+        bidirectional=bool(cfg.model.bidirectional),
+        out_size=int(cfg.model.out_size),
+    )
+
+
+def _build_train_config(cfg: DictConfig) -> TrainConfig:
+    return TrainConfig(
+        epochs=int(cfg.train.epochs),
+        lr=float(cfg.train.lr),
+        weight_decay=float(cfg.train.weight_decay),
+        save_dir=Path(to_absolute_path(cfg.train.save_dir)),
+        ckpt_name=str(cfg.train.ckpt_name),
+        early_stopping_patience=int(cfg.train.early_stopping_patience),
+    )
+
+
+@hydra.main(version_base=None, config_path="../configs", config_name="config")
+def main(cfg: DictConfig) -> None:
+    # Print the active config for traceability
+    print(OmegaConf.to_yaml(cfg))
+
+    # Configs
+    data_cfg = _build_data_config(cfg)
+    ensure_raw_data(public_link=data_cfg.data_url, dst=data_cfg.raw_path)
+    model_cfg = _build_model_config(cfg)
+    train_cfg = _build_train_config(cfg)
 
     device = get_device()
     print("Device:", device)

@@ -35,6 +35,7 @@ class DataConfig:
     """Configuration container for the data pipeline."""
 
     raw_path: Path = Path("data/raw/daily_climate_data.csv")
+    data_url: str = "https://disk.360.yandex.ru/d/8K8JWqynAo7XvA"
     processed_dir: Path = Path("data/processed")
 
     lookback: int = 7

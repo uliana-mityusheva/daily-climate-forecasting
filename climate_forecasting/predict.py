@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-import argparse
 import json
 from pathlib import Path
 
+import hydra
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
+from hydra.utils import to_absolute_path
+from omegaconf import DictConfig, OmegaConf
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from climate_forecasting.data import (
@@ -121,25 +123,32 @@ def predict_on_test(
     plt.close()
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--model-path",
-        type=Path,
-        default=Path("artifacts/model_best.pt"),
-    )
-    args = parser.parse_args()
+@hydra.main(version_base=None, config_path="../configs", config_name="config")
+def main(cfg: DictConfig) -> None:
+    print(OmegaConf.to_yaml(cfg))
 
-    cfg = DataConfig()
-    ensure_raw_data(
-        public_link=cfg.data_url,
-        dst=cfg.raw_path,
+    data_cfg = DataConfig(
+        raw_path=Path(to_absolute_path(cfg.data.raw_path)),
+        data_url=str(cfg.data.data_url),
+        processed_dir=Path(to_absolute_path(cfg.data.processed_dir)),
+        lookback=int(cfg.data.lookback),
+        train_ratio=float(cfg.data.train_ratio),
+        val_ratio=float(cfg.data.val_ratio),
+        batch_size=int(cfg.data.batch_size),
+        num_workers=int(cfg.data.num_workers),
+        pin_memory=bool(cfg.data.pin_memory),
+        shuffle_train=bool(cfg.data.shuffle_train),
+        save_scaler=bool(cfg.data.save_scaler),
+        scaler_name=str(cfg.data.scaler_name),
     )
+
+    ensure_raw_data(public_link=data_cfg.data_url, dst=data_cfg.raw_path)
     device = _get_device()
     print(f"Device: {device}")
 
-    model = load_model(args.model_path, device)
-    predict_on_test(model, cfg)
+    model_path = Path(to_absolute_path(cfg.predict.model_path))
+    model = load_model(model_path, device)
+    predict_on_test(model, data_cfg)
 
 
 if __name__ == "__main__":
