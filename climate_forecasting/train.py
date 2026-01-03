@@ -4,12 +4,14 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict
 
 import hydra
+import pytorch_lightning as pl
 import torch
 from hydra.utils import to_absolute_path
 from omegaconf import DictConfig, OmegaConf
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+from pytorch_lightning.loggers import MLFlowLogger
 from torch import nn
 from torch.optim import Adam
 
@@ -29,14 +31,6 @@ class TrainConfig:
 
     # set 0 to disable early stopping
     early_stopping_patience: int = 10
-
-
-def get_device() -> torch.device:
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    return torch.device("cpu")
 
 
 def _to_jsonable(d: dict) -> dict:
@@ -79,71 +73,50 @@ def save_checkpoint(
         )
 
 
-@torch.no_grad()
-def evaluate(
-    model: nn.Module,
-    loader: torch.utils.data.DataLoader,
-    criterion: nn.Module,
-    device: torch.device,
-) -> Dict[str, float]:
-    model.eval()
-    total_loss = 0.0
-    total_last_mse = 0.0
-    n_batches = 0
+class LSTMModule(pl.LightningModule):
+    def __init__(self, model_cfg: ModelConfig, lr: float, weight_decay: float):
+        super().__init__()
+        self.model = ClimateLSTM(model_cfg)
+        self.criterion = nn.MSELoss()
+        self.lr = lr
+        self.weight_decay = weight_decay
 
-    for x, y in loader:
-        x = x.to(device)
-        y = y.to(device)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.model(x)
 
-        y_hat = model(x)
-        loss = criterion(y_hat, y)
-        total_loss += float(loss.item())
+    def training_step(self, batch, batch_idx: int):
+        features, targets = batch
+        preds = self(features)
+        loss = self.criterion(preds, targets)
+        last_mse = torch.mean((preds[:, -1, 0] - targets[:, -1, 0]) ** 2)
+        self.log("train/loss", loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log(
+            "train/last_mse", last_mse, prog_bar=False, on_step=False, on_epoch=True
+        )
+        return loss
 
-        last_mse = torch.mean((y_hat[:, -1, 0] - y[:, -1, 0]) ** 2)
-        total_last_mse += float(last_mse.item())
+    def validation_step(self, batch, batch_idx: int):
+        features, targets = batch
+        preds = self(features)
+        loss = self.criterion(preds, targets)
+        last_mse = torch.mean((preds[:, -1, 0] - targets[:, -1, 0]) ** 2)
+        self.log("val/loss", loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log("val/last_mse", last_mse, prog_bar=False, on_step=False, on_epoch=True)
+        return {"val_loss": loss, "val_last_mse": last_mse}
 
-        n_batches += 1
+    def test_step(self, batch, batch_idx: int):
+        features, targets = batch
+        preds = self(features)
+        loss = self.criterion(preds, targets)
+        last_mse = torch.mean((preds[:, -1, 0] - targets[:, -1, 0]) ** 2)
+        self.log("test/loss", loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log(
+            "test/last_mse", last_mse, prog_bar=False, on_step=False, on_epoch=True
+        )
+        return {"test_loss": loss, "test_last_mse": last_mse}
 
-    if n_batches == 0:
-        return {"loss": float("nan"), "last_mse": float("nan")}
-
-    return {"loss": total_loss / n_batches, "last_mse": total_last_mse / n_batches}
-
-
-def train_one_epoch(
-    model: nn.Module,
-    loader: torch.utils.data.DataLoader,
-    criterion: nn.Module,
-    optimizer: torch.optim.Optimizer,
-    device: torch.device,
-) -> Dict[str, float]:
-    model.train()
-    total_loss = 0.0
-    total_last_mse = 0.0
-    n_batches = 0
-
-    for x, y in loader:
-        x = x.to(device)
-        y = y.to(device)
-
-        optimizer.zero_grad(set_to_none=True)
-        y_hat = model(x)
-
-        loss = criterion(y_hat, y)
-        loss.backward()
-        optimizer.step()
-
-        total_loss += float(loss.item())
-
-        last_mse = torch.mean((y_hat[:, -1, 0] - y[:, -1, 0]) ** 2)
-        total_last_mse += float(last_mse.item())
-
-        n_batches += 1
-
-    return {
-        "loss": total_loss / max(n_batches, 1),
-        "last_mse": total_last_mse / max(n_batches, 1),
-    }
+    def configure_optimizers(self):
+        return Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
 
 
 def _build_data_config(cfg: DictConfig) -> DataConfig:
@@ -197,60 +170,74 @@ def main(cfg: DictConfig) -> None:
     model_cfg = _build_model_config(cfg)
     train_cfg = _build_train_config(cfg)
 
-    device = get_device()
-    print("Device:", device)
-
+    # Data
     train_loader, val_loader, test_loader = create_dataloaders(data_cfg)
 
-    model = ClimateLSTM(model_cfg).to(device)
-    criterion = nn.MSELoss()
-    optimizer = Adam(
-        model.parameters(), lr=train_cfg.lr, weight_decay=train_cfg.weight_decay
+    # Lightning module
+    lit_module = LSTMModule(
+        model_cfg, lr=train_cfg.lr, weight_decay=train_cfg.weight_decay
     )
 
-    best_val = float("inf")
-    best_epoch = -1
-    patience_left = train_cfg.early_stopping_patience
+    # Callbacks
+    checkpoint_cb = ModelCheckpoint(
+        dirpath=str(train_cfg.save_dir),
+        filename=Path(train_cfg.ckpt_name).stem,
+        save_top_k=1,
+        monitor="val/loss",
+        mode="min",
+        save_last=False,
+    )
+    early_stop_cb = EarlyStopping(
+        monitor="val/loss",
+        patience=train_cfg.early_stopping_patience,
+        mode="min",
+    )
 
-    ckpt_path = train_cfg.save_dir / train_cfg.ckpt_name
+    # MLflow logger
+    mlf_logger = MLFlowLogger(
+        experiment_name=cfg.logging.experiment_name,
+        tracking_uri=cfg.logging.tracking_uri,
+        run_name=cfg.logging.run_name,
+    )
+    # Log hyperparameters
+    mlf_logger.log_hyperparams(
+        {
+            **{f"data/{k}": v for k, v in data_cfg.__dict__.items()},
+            **{f"model/{k}": v for k, v in model_cfg.__dict__.items()},
+            **{f"train/{k}": v for k, v in train_cfg.__dict__.items()},
+        }
+    )
 
-    for epoch in range(1, train_cfg.epochs + 1):
-        tr = train_one_epoch(model, train_loader, criterion, optimizer, device)
-        va = evaluate(model, val_loader, criterion, device)
+    trainer = pl.Trainer(
+        max_epochs=train_cfg.epochs,
+        logger=mlf_logger,
+        callbacks=[checkpoint_cb, early_stop_cb],
+        accelerator="auto",
+        devices="auto",
+        log_every_n_steps=1,
+    )
 
-        print(
-            f"Epoch {epoch:03d}/{train_cfg.epochs} | "
-            f"train_loss={tr['loss']:.6f} train_last_mse={tr['last_mse']:.6f} | "
-            f"val_loss={va['loss']:.6f} val_last_mse={va['last_mse']:.6f}"
+    trainer.fit(lit_module, train_dataloaders=train_loader, val_dataloaders=val_loader)
+
+    # After fit, load best checkpoint,
+    # save a plain PyTorch checkpoint for predict.py compatibility, then test
+    best_ckpt = checkpoint_cb.best_model_path
+    if best_ckpt:
+        print(f"Best Lightning checkpoint: {best_ckpt}")
+        lit_best = LSTMModule.load_from_checkpoint(
+            best_ckpt,
+            model_cfg=model_cfg,
+            lr=train_cfg.lr,
+            weight_decay=train_cfg.weight_decay,
         )
+        model = lit_best.model
+        # Save in previous plain format for predict.py
+        ckpt_path = train_cfg.save_dir / "model_best.pt"
+        save_checkpoint(ckpt_path, model, model_cfg, data_cfg)
+        print(f"Saved plain checkpoint for inference: {ckpt_path}")
 
-        improved = va["loss"] < best_val - 1e-12
-        if improved:
-            best_val = va["loss"]
-            best_epoch = epoch
-            save_checkpoint(ckpt_path, model, model_cfg, data_cfg)
-            print(f"  ✅ Saved best checkpoint (val_loss={best_val:.6f})")
-            patience_left = train_cfg.early_stopping_patience
-        else:
-            if train_cfg.early_stopping_patience > 0:
-                patience_left -= 1
-                if patience_left <= 0:
-                    print(
-                        f"  🛑 Early stopping at epoch {epoch}. Best epoch: {best_epoch}"
-                    )
-                    break
-
-    # Load best checkpoint and evaluate on test
-    if ckpt_path.exists():
-        # PyTorch 2.6+ default weights_only=True may reject non-weights objects.
-        # Saved JSON-serializable configs.
-        # But still explicitly allow full load for our trusted checkpoint.
-        ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
-        model.load_state_dict(ckpt["state_dict"])
-        print(f"Loaded best checkpoint from {ckpt_path}")
-
-    te = evaluate(model, test_loader, criterion, device)
-    print(f"TEST | loss={te['loss']:.6f} last_mse={te['last_mse']:.6f}")
+    # Test with the best model (Lightning will load from checkpoint if provided)
+    trainer.test(lit_module if not best_ckpt else lit_best, dataloaders=test_loader)
 
 
 if __name__ == "__main__":

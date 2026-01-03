@@ -3,6 +3,7 @@ defaults:
   - model: model
   - train: train
   - predict: predict
+  - logging: logging
   - _self_
 
 # Global config anchor for future extensions (logging/serve, etc.)
