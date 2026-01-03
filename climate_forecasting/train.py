@@ -11,6 +11,7 @@ from torch import nn
 from torch.optim import Adam
 
 from climate_forecasting.data import DataConfig, create_dataloaders
+from climate_forecasting.data_download import ensure_raw_data
 from climate_forecasting.model import ClimateLSTM, ModelConfig
 
 
@@ -145,6 +146,10 @@ def train_one_epoch(
 def main() -> None:
     # Configs
     data_cfg = DataConfig()
+    ensure_raw_data(
+        public_link=data_cfg.data_url,
+        dst=data_cfg.raw_path,
+    )
     model_cfg = ModelConfig()
     train_cfg = TrainConfig()
 

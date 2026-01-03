@@ -19,6 +19,7 @@ from climate_forecasting.data import (
     inverse_transform_meantemp,
     load_scaler,
 )
+from climate_forecasting.data_download import ensure_raw_data
 from climate_forecasting.model import ClimateLSTM, ModelConfig
 
 
@@ -130,6 +131,10 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = DataConfig()
+    ensure_raw_data(
+        public_link=cfg.data_url,
+        dst=cfg.raw_path,
+    )
     device = _get_device()
     print(f"Device: {device}")
 
