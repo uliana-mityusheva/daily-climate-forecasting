@@ -2,15 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Tuple, Dict, Any
+from typing import Any, Dict, Tuple
 
 import joblib
 import numpy as np
 import pandas as pd
 import torch
 from sklearn.preprocessing import MinMaxScaler
-from torch.utils.data import Dataset, DataLoader
-
+from torch.utils.data import DataLoader, Dataset
 
 DATE_COL = "date"
 
@@ -34,6 +33,7 @@ N_FEATURES = len(FEATURE_COLS)  # 6
 @dataclass(frozen=True)
 class DataConfig:
     """Configuration container for the data pipeline."""
+
     raw_path: Path = Path("data/raw/daily_climate_data.csv")
     processed_dir: Path = Path("data/processed")
 
@@ -57,10 +57,15 @@ class ClimateSeq2SeqDataset(Dataset):
     X: [lookback, 6]
     y: [lookback, 1]  (sequence of meantemp)
     """
+
     def __init__(self, X: np.ndarray, y: np.ndarray):
-        assert X.ndim == 3 and X.shape[2] == N_FEATURES, f"X must be [N,T,6], got {X.shape}"
+        assert (
+            X.ndim == 3 and X.shape[2] == N_FEATURES
+        ), f"X must be [N,T,6], got {X.shape}"
         assert y.ndim == 3 and y.shape[2] == 1, f"y must be [N,T,1], got {y.shape}"
-        assert X.shape[0] == y.shape[0] and X.shape[1] == y.shape[1], "X and y must align"
+        assert (
+            X.shape[0] == y.shape[0] and X.shape[1] == y.shape[1]
+        ), "X and y must align"
 
         self.X = torch.from_numpy(X.astype(np.float32))
         self.y = torch.from_numpy(y.astype(np.float32))
@@ -97,7 +102,9 @@ def _feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
 
     # Humidity/pressure ratio with safe handling of inf/nan
     if COL_PRESS not in df.columns or COL_HUM not in df.columns:
-        raise ValueError(f"Need columns '{COL_HUM}' and '{COL_PRESS}' for ratio feature.")
+        raise ValueError(
+            f"Need columns '{COL_HUM}' and '{COL_PRESS}' for ratio feature."
+        )
 
     df[COL_RATIO] = df[COL_HUM] / df[COL_PRESS].replace(0, np.nan)
     df[COL_RATIO] = df[COL_RATIO].replace([np.inf, -np.inf], np.nan)
@@ -107,7 +114,9 @@ def _feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _time_splits(n: int, train_ratio: float, val_ratio: float) -> Tuple[slice, slice, slice]:
+def _time_splits(
+    n: int, train_ratio: float, val_ratio: float
+) -> Tuple[slice, slice, slice]:
     if not (0 < train_ratio < 1):
         raise ValueError("train_ratio must be in (0,1)")
     if not (0 <= val_ratio < 1):
@@ -135,7 +144,9 @@ def _fit_scaler(train_values: np.ndarray) -> MinMaxScaler:
     return scaler
 
 
-def create_windows_seq2seq(series_scaled: np.ndarray, lookback: int) -> Tuple[np.ndarray, np.ndarray]:
+def create_windows_seq2seq(
+    series_scaled: np.ndarray, lookback: int
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     series_scaled: [N, 7] aligned with ALL_COLS, already scaled by MinMaxScaler
     Returns:
@@ -143,7 +154,9 @@ def create_windows_seq2seq(series_scaled: np.ndarray, lookback: int) -> Tuple[np
       y: [M, lookback, 1]
     """
     if series_scaled.ndim != 2 or series_scaled.shape[1] != len(ALL_COLS):
-        raise ValueError(f"Expected [N,7] array aligned with ALL_COLS, got {series_scaled.shape}")
+        raise ValueError(
+            f"Expected [N,7] array aligned with ALL_COLS, got {series_scaled.shape}"
+        )
 
     n = series_scaled.shape[0]
     m = n - lookback + 1
@@ -157,26 +170,32 @@ def create_windows_seq2seq(series_scaled: np.ndarray, lookback: int) -> Tuple[np
     targ_vec = series_scaled[:, TARGET_INDEX]
 
     for i in range(m):
-        X[i] = feat_mat[i: i + lookback]
-        y[i, :, 0] = targ_vec[i: i + lookback]
+        X[i] = feat_mat[i : i + lookback]
+        y[i, :, 0] = targ_vec[i : i + lookback]
 
     return X, y
 
 
-def prepare_datasets(cfg: DataConfig) -> Tuple[ClimateSeq2SeqDataset, ClimateSeq2SeqDataset, ClimateSeq2SeqDataset]:
+def prepare_datasets(
+    cfg: DataConfig,
+) -> Tuple[ClimateSeq2SeqDataset, ClimateSeq2SeqDataset, ClimateSeq2SeqDataset]:
     df = _read_raw_df(cfg.raw_path)
     df = _feature_engineering(df)
 
     required = (COL_HUM, COL_WIND, COL_PRESS, COL_TARGET)
     missing = [c for c in required if c not in df.columns]
     if missing:
-        raise ValueError(f"Missing required columns: {missing}. Available: {df.columns.tolist()}")
+        raise ValueError(
+            f"Missing required columns: {missing}. Available: {df.columns.tolist()}"
+        )
 
     # IMPORTANT: enforce column order to match ALL_COLS
     df = df.loc[:, (DATE_COL, *ALL_COLS)].copy()
 
     series = df.loc[:, ALL_COLS].to_numpy(dtype=np.float32)  # [N,7]
-    train_sl, val_sl, test_sl = _time_splits(len(series), cfg.train_ratio, cfg.val_ratio)
+    train_sl, val_sl, test_sl = _time_splits(
+        len(series), cfg.train_ratio, cfg.val_ratio
+    )
 
     _ensure_enough_rows("train", train_sl.stop - train_sl.start, cfg.lookback)
     _ensure_enough_rows("val", val_sl.stop - val_sl.start, cfg.lookback)
@@ -238,13 +257,18 @@ def create_dataloaders(cfg: DataConfig) -> Tuple[DataLoader, DataLoader, DataLoa
     return train_loader, val_loader, test_loader
 
 
-def load_scaler(processed_dir: Path = Path("data/processed"), scaler_name: str = "minmax_scaler.joblib") -> Dict[str, Any]:
+def load_scaler(
+    processed_dir: Path = Path("data/processed"),
+    scaler_name: str = "minmax_scaler.joblib",
+) -> Dict[str, Any]:
     path = processed_dir / scaler_name
     if not path.exists():
         raise FileNotFoundError(f"Scaler not found: {path}")
     pack = joblib.load(path)
     if not isinstance(pack, dict) or "scaler" not in pack:
-        raise ValueError(f"Unexpected scaler pack format in {path}. Expected dict with key 'scaler'.")
+        raise ValueError(
+            f"Unexpected scaler pack format in {path}. Expected dict with key 'scaler'."
+        )
     return pack
 
 

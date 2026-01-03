@@ -8,13 +8,13 @@ from torch import nn
 
 @dataclass(frozen=True)
 class ModelConfig:
-    input_size: int = 6          # month, day, humidity, wind_speed, meanpressure, ratio
+    input_size: int = 6  # month, day, humidity, wind_speed, meanpressure, ratio
     hidden_size: int = 64
     num_layers: int = 1
-    dropout: float = 0.0         # applied only if num_layers > 1
+    dropout: float = 0.0  # applied only if num_layers > 1
     bidirectional: bool = False
 
-    out_size: int = 1            # meantemp per timestep
+    out_size: int = 1  # meantemp per timestep
 
 
 class ClimateLSTM(nn.Module):
@@ -45,6 +45,6 @@ class ClimateLSTM(nn.Module):
         x: [B, T, F]
         return: [B, T, 1]
         """
-        out, _ = self.lstm(x)     # [B, T, H]
-        y_hat = self.fc(out)      # [B, T, 1]
+        out, _ = self.lstm(x)  # [B, T, H]
+        y_hat = self.fc(out)  # [B, T, 1]
         return y_hat

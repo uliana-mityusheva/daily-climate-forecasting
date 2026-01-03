@@ -1,17 +1,17 @@
 # climate_forecasting/train.py
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict
-import json
 
 import torch
 from torch import nn
 from torch.optim import Adam
 
 from climate_forecasting.data import DataConfig, create_dataloaders
-from climate_forecasting.model import ModelConfig, ClimateLSTM
+from climate_forecasting.model import ClimateLSTM, ModelConfig
 
 
 @dataclass(frozen=True)
@@ -36,7 +36,8 @@ def get_device() -> torch.device:
 
 
 def _to_jsonable(d: dict) -> dict:
-    """Convert Path values to str so checkpoint is safe to unpickle across torch versions."""
+    """Convert Path values to str
+    so checkpoint is safe to unpickle across torch versions."""
     out = {}
     for k, v in d.items():
         out[k] = str(v) if isinstance(v, Path) else v
@@ -135,7 +136,10 @@ def train_one_epoch(
 
         n_batches += 1
 
-    return {"loss": total_loss / max(n_batches, 1), "last_mse": total_last_mse / max(n_batches, 1)}
+    return {
+        "loss": total_loss / max(n_batches, 1),
+        "last_mse": total_last_mse / max(n_batches, 1),
+    }
 
 
 def main() -> None:
@@ -151,7 +155,9 @@ def main() -> None:
 
     model = ClimateLSTM(model_cfg).to(device)
     criterion = nn.MSELoss()
-    optimizer = Adam(model.parameters(), lr=train_cfg.lr, weight_decay=train_cfg.weight_decay)
+    optimizer = Adam(
+        model.parameters(), lr=train_cfg.lr, weight_decay=train_cfg.weight_decay
+    )
 
     best_val = float("inf")
     best_epoch = -1
@@ -180,13 +186,16 @@ def main() -> None:
             if train_cfg.early_stopping_patience > 0:
                 patience_left -= 1
                 if patience_left <= 0:
-                    print(f"  🛑 Early stopping at epoch {epoch}. Best epoch: {best_epoch}")
+                    print(
+                        f"  🛑 Early stopping at epoch {epoch}. Best epoch: {best_epoch}"
+                    )
                     break
 
     # Load best checkpoint and evaluate on test
     if ckpt_path.exists():
         # PyTorch 2.6+ default weights_only=True may reject non-weights objects.
-        # We saved JSON-serializable configs, but still explicitly allow full load for our trusted checkpoint.
+        # Saved JSON-serializable configs.
+        # But still explicitly allow full load for our trusted checkpoint.
         ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
         model.load_state_dict(ckpt["state_dict"])
         print(f"Loaded best checkpoint from {ckpt_path}")

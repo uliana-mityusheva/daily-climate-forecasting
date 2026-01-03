@@ -1,25 +1,25 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
-import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from climate_forecasting.data import (
-    DataConfig,
-    load_scaler,
-    inverse_transform_meantemp,
-    create_windows_seq2seq,
-    _read_raw_df,
-    _feature_engineering,
     ALL_COLS,
+    DataConfig,
+    _feature_engineering,
+    _read_raw_df,
+    create_windows_seq2seq,
+    inverse_transform_meantemp,
+    load_scaler,
 )
 from climate_forecasting.model import ClimateLSTM, ModelConfig
-import json
 
 
 def _get_device() -> torch.device:
@@ -75,8 +75,8 @@ def predict_on_test(
     device = next(model.parameters()).device
     X = torch.from_numpy(X_test).float().to(device)
 
-    y_true_scaled = y_test[:, -1, 0]          # last timestep (numpy)
-    y_hat = model(X)                          # [B,T,1]
+    y_true_scaled = y_test[:, -1, 0]  # last timestep (numpy)
+    y_hat = model(X)  # [B,T,1]
     y_pred_scaled = y_hat[:, -1, 0].cpu().numpy()
 
     # -------- inverse transform --------
@@ -88,7 +88,9 @@ def predict_on_test(
 
     # -------- metrics --------
     mae = float(mean_absolute_error(y_true, y_pred))
-    rmse = float(np.sqrt(mean_squared_error(y_true, y_pred)))  # compatible with older sklearn
+    rmse = float(
+        np.sqrt(mean_squared_error(y_true, y_pred))
+    )  # compatible with older sklearn
 
     print(f"TEST MAE  (°C): {mae:.3f}")
     print(f"TEST RMSE (°C): {rmse:.3f}")
