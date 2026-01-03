@@ -215,6 +215,10 @@ data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 
+# DVC metadata should be tracked by git
+!data/raw/*.dvc
+!data/processed/*.dvc
+
 # ML artifacts
 *.joblib
 *.pt
@@ -230,4 +234,7 @@ wandb/
 
 # Artifacts (models, checkpoints)
 artifacts/
-reports/
+
+# reports artifacts
+reports/*
+!reports/metrics.json

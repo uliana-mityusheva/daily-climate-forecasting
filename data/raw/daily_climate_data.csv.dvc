@@ -1,0 +1,5 @@
+outs:
+- md5: 3b585794c5df8e6ca55145b51dce4130
+  size: 85205
+  hash: md5
+  path: daily_climate_data.csv
