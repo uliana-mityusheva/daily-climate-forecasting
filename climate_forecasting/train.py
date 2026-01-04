@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 import hydra
+import matplotlib.pyplot as plt
 import pytorch_lightning as pl
 import torch
 from hydra.utils import to_absolute_path
@@ -81,6 +83,12 @@ class LSTMModule(pl.LightningModule):
         self.lr = lr
         self.weight_decay = weight_decay
 
+        # For plotting after training
+        self.train_loss_hist = []
+        self.val_loss_hist = []
+        self.train_last_mse_hist = []
+        self.val_last_mse_hist = []
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)
 
@@ -117,6 +125,23 @@ class LSTMModule(pl.LightningModule):
 
     def configure_optimizers(self):
         return Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+
+    def on_train_epoch_end(self):
+        # Collect last logged metrics for plotting
+        metrics = self.trainer.callback_metrics
+        if "train/loss" in metrics:
+            self.train_loss_hist.append(float(metrics["train/loss"].detach().cpu()))
+        if "train/last_mse" in metrics:
+            self.train_last_mse_hist.append(
+                float(metrics["train/last_mse"].detach().cpu())
+            )
+
+    def on_validation_epoch_end(self):
+        metrics = self.trainer.callback_metrics
+        if "val/loss" in metrics:
+            self.val_loss_hist.append(float(metrics["val/loss"].detach().cpu()))
+        if "val/last_mse" in metrics:
+            self.val_last_mse_hist.append(float(metrics["val/last_mse"].detach().cpu()))
 
 
 def _build_data_config(cfg: DictConfig) -> DataConfig:
@@ -208,6 +233,15 @@ def main(cfg: DictConfig) -> None:
         }
     )
 
+    # Log git commit SHA as code version
+    try:
+        commit_sha = (
+            subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
+        )
+        mlf_logger.experiment.log_param(mlf_logger.run_id, "git_commit", commit_sha)
+    except Exception:
+        pass
+
     trainer = pl.Trainer(
         max_epochs=train_cfg.epochs,
         logger=mlf_logger,
@@ -235,6 +269,43 @@ def main(cfg: DictConfig) -> None:
         ckpt_path = train_cfg.save_dir / "model_best.pt"
         save_checkpoint(ckpt_path, model, model_cfg, data_cfg)
         print(f"Saved plain checkpoint for inference: {ckpt_path}")
+
+    # Save training plots to configured plots directory
+    plots_dir = Path(to_absolute_path(cfg.logging.plots_dir))
+    plots_dir.mkdir(parents=True, exist_ok=True)
+
+    if getattr(lit_module, "train_loss_hist", None):
+        plt.figure()
+        plt.plot(lit_module.train_loss_hist, label="train/loss")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.title("Training Loss")
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(plots_dir / "train_loss.png")
+        plt.close()
+
+    if getattr(lit_module, "val_loss_hist", None):
+        plt.figure()
+        plt.plot(lit_module.val_loss_hist, label="val/loss")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.title("Validation Loss")
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(plots_dir / "val_loss.png")
+        plt.close()
+
+    if getattr(lit_module, "val_last_mse_hist", None):
+        plt.figure()
+        plt.plot(lit_module.val_last_mse_hist, label="val/last_mse")
+        plt.xlabel("Epoch")
+        plt.ylabel("Last-step MSE")
+        plt.title("Validation Last-step MSE")
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(plots_dir / "val_last_mse.png")
+        plt.close()
 
     # Test with the best model (Lightning will load from checkpoint if provided)
     trainer.test(lit_module if not best_ckpt else lit_best, dataloaders=test_loader)

@@ -54,6 +54,9 @@ def predict_on_test(
 ) -> None:
     reports_dir = Path("reports")
     reports_dir.mkdir(exist_ok=True, parents=True)
+    # also ensure plots dir from config exists
+    # cfg for logging comes from the global Hydra cfg; we receive only DataConfig here,
+    # so we'll derive plots_dir from hydra cfg in main()
 
     # -------- data --------
     df = _read_raw_df(cfg.raw_path)
@@ -119,6 +122,7 @@ def predict_on_test(
     plt.ylabel("Temperature (°C)")
     plt.legend()
     plt.tight_layout()
+    # Save to reports for artifacts and to plots for required logging
     plt.savefig(reports_dir / "test_predictions.png")
     plt.close()
 
@@ -149,6 +153,19 @@ def main(cfg: DictConfig) -> None:
     model_path = Path(to_absolute_path(cfg.predict.model_path))
     model = load_model(model_path, device)
     predict_on_test(model, data_cfg)
+
+    # Save a copy of the predictions plot into configured plots directory
+    plots_dir = Path(to_absolute_path(cfg.logging.plots_dir))
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    src_plot = Path("reports") / "test_predictions.png"
+    if src_plot.exists():
+        # Recreate the plot file in plots_dir by copying bytes
+        dst_plot = plots_dir / "test_predictions.png"
+        try:
+            with open(src_plot, "rb") as fsrc, open(dst_plot, "wb") as fdst:
+                fdst.write(fsrc.read())
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
