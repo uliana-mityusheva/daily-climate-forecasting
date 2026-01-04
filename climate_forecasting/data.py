@@ -36,6 +36,11 @@ class DataConfig:
 
     raw_path: Path = Path("data/raw/daily_climate_data.csv")
     data_url: str = "https://disk.360.yandex.ru/d/8K8JWqynAo7XvA"
+    # DVC integration
+    use_dvc: bool = True
+    dvc_repo: str | None = "."  # current repo
+    dvc_path: str | None = "data/raw/daily_climate_data.csv"
+    dvc_rev: str | None = None
     processed_dir: Path = Path("data/processed")
 
     lookback: int = 7

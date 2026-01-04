@@ -18,7 +18,7 @@ from torch import nn
 from torch.optim import Adam
 
 from climate_forecasting.data import DataConfig, create_dataloaders
-from climate_forecasting.data_download import ensure_raw_data
+from climate_forecasting.data_download import ensure_raw_data_dvc_first
 from climate_forecasting.model import ClimateLSTM, ModelConfig
 
 
@@ -159,6 +159,10 @@ def _build_data_config(cfg: DictConfig) -> DataConfig:
         shuffle_train=bool(cfg.data.shuffle_train),
         save_scaler=bool(cfg.data.save_scaler),
         scaler_name=str(cfg.data.scaler_name),
+        use_dvc=bool(getattr(cfg.data, "use_dvc", True)),
+        dvc_repo=str(getattr(cfg.data, "dvc_repo", ".")),
+        dvc_path=str(getattr(cfg.data, "dvc_path", "")) or None,
+        dvc_rev=(str(getattr(cfg.data, "dvc_rev", "")) or None),
     )
 
 
@@ -191,7 +195,13 @@ def main(cfg: DictConfig) -> None:
 
     # Configs
     data_cfg = _build_data_config(cfg)
-    ensure_raw_data(public_link=data_cfg.data_url, dst=data_cfg.raw_path)
+    ensure_raw_data_dvc_first(
+        dst=data_cfg.raw_path,
+        public_link=data_cfg.data_url,
+        dvc_repo=str(getattr(data_cfg, "dvc_repo", ".")),
+        dvc_path=str(getattr(data_cfg, "dvc_path", "")) or None,
+        dvc_rev=str(getattr(cfg.data, "dvc_rev", "")) or None,
+    )
     model_cfg = _build_model_config(cfg)
     train_cfg = _build_train_config(cfg)
 

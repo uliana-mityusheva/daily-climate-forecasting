@@ -1,0 +1,10 @@
+stages:
+  download:
+    cmd: uv run python -m climate_forecasting.get_data
+    deps:
+      - climate_forecasting/get_data.py
+      - climate_forecasting/data_download.py
+      - configs/config.yaml
+      - configs/data/data.yaml
+    outs:
+      - data/raw/daily_climate_data.csv

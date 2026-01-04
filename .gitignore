@@ -239,5 +239,12 @@ artifacts/
 reports/
 plots/
 
+# Node.js dependencies (if present locally)
+node_modules/
+
 mlflow.db
 outputs/
+.secrets/
+.dvc/config.local
+.dvc/*.bak
+dvc_store/

@@ -21,7 +21,7 @@ from climate_forecasting.data import (
     inverse_transform_meantemp,
     load_scaler,
 )
-from climate_forecasting.data_download import ensure_raw_data
+from climate_forecasting.data_download import ensure_raw_data_dvc_first
 from climate_forecasting.model import ClimateLSTM, ModelConfig
 
 
@@ -144,9 +144,19 @@ def main(cfg: DictConfig) -> None:
         shuffle_train=bool(cfg.data.shuffle_train),
         save_scaler=bool(cfg.data.save_scaler),
         scaler_name=str(cfg.data.scaler_name),
+        use_dvc=bool(getattr(cfg.data, "use_dvc", True)),
+        dvc_repo=str(getattr(cfg.data, "dvc_repo", ".")),
+        dvc_path=str(getattr(cfg.data, "dvc_path", "")) or None,
+        dvc_rev=(str(getattr(cfg.data, "dvc_rev", "")) or None),
     )
 
-    ensure_raw_data(public_link=data_cfg.data_url, dst=data_cfg.raw_path)
+    ensure_raw_data_dvc_first(
+        dst=data_cfg.raw_path,
+        public_link=data_cfg.data_url,
+        dvc_repo=str(getattr(data_cfg, "dvc_repo", ".")),
+        dvc_path=str(getattr(data_cfg, "dvc_path", "")) or None,
+        dvc_rev=str(getattr(cfg.data, "dvc_rev", "")) or None,
+    )
     device = _get_device()
     print(f"Device: {device}")
 
