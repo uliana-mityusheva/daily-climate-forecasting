@@ -1,5 +1,5 @@
 # ONNX export configuration
 model_path: artifacts/model_best.pt
 onnx_path: artifacts/model.onnx
-opset_version: 17
-dynamic_shapes: true
+opset_version: 18
+dynamic_shapes: false

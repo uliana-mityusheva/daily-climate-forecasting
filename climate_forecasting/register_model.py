@@ -5,6 +5,7 @@ from pathlib import Path
 import hydra
 import mlflow
 import mlflow.onnx
+import onnx
 from hydra.utils import to_absolute_path
 from omegaconf import DictConfig, OmegaConf
 
@@ -24,7 +25,8 @@ def main(cfg: DictConfig) -> None:
     mlflow.set_experiment(experiment_name)
 
     with mlflow.start_run(run_name="register_model") as run:
-        mlflow.onnx.log_model(onnx_model=str(onnx_path), artifact_path="model")
+        onnx_model = onnx.load(str(onnx_path))
+        mlflow.onnx.log_model(onnx_model=onnx_model, artifact_path="model")
         run_id = run.info.run_id
         print(f"Logged ONNX model to MLflow run_id={run_id}")
 

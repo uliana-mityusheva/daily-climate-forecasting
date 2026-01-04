@@ -16,30 +16,57 @@ from climate_forecasting.register_model import main as register_model_main
 from climate_forecasting.train import main as train_main
 
 
+def _run_hydra(entrypoint, overrides: tuple[str, ...]):
+    prev_argv = sys.argv
+    try:
+        sys.argv = [prev_argv[0], *overrides]
+        return entrypoint()
+    finally:
+        sys.argv = prev_argv
+
+
 class Commands:
-    def get_data(self):
-        """Download or fetch data via DVC according to configs."""
-        return get_data_main()
+    def get_data(self, *overrides: str):
+        """Download or fetch data via DVC according to configs.
 
-    def train(self):
-        """Run model training with Hydra configs."""
-        return train_main()
+        Example: dcf get_data data.raw_path=data/raw/file.csv
+        """
+        return _run_hydra(get_data_main, overrides)
 
-    def predict(self):
-        """Run inference on the test split and produce reports/plots."""
-        return predict_main()
+    def train(self, *overrides: str):
+        """Run model training with Hydra configs.
 
-    def export(self):
-        """Export trained model to ONNX."""
-        return export_main()
+        Example: dcf train model.hidden_size=128 train.epochs=5
+        """
+        return _run_hydra(train_main, overrides)
 
-    def convert_trt(self):
-        """Convert ONNX model to TensorRT engine using trtexec."""
-        return convert_trt_main()
+    def predict(self, *overrides: str):
+        """Run inference on the test split and produce reports/plots.
 
-    def register_model(self):
-        """Log and (optionally) register the ONNX model in MLflow."""
-        return register_model_main()
+        Example: dcf predict data.lookback=10
+        """
+        return _run_hydra(predict_main, overrides)
+
+    def export(self, *overrides: str):
+        """Export trained model to ONNX.
+
+        Example: dcf export export.onnx_path=artifacts/model.onnx
+        """
+        return _run_hydra(export_main, overrides)
+
+    def convert_trt(self, *overrides: str):
+        """Convert ONNX model to TensorRT engine using trtexec.
+
+        Example: dcf convert_trt export.onnx_path=artifacts/model.onnx
+        """
+        return _run_hydra(convert_trt_main, overrides)
+
+    def register_model(self, *overrides: str):
+        """Log and (optionally) register the ONNX model in MLflow.
+
+        Example: dcf register_model serve.register=false
+        """
+        return _run_hydra(register_model_main, overrides)
 
 
 def main():

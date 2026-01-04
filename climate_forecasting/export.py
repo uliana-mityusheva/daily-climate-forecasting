@@ -31,19 +31,15 @@ def _export_onnx(
     dynamic: bool,
 ) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    dynamic_axes = (
-        {"features": {0: "batch", 1: "time"}, "y_hat": {0: "batch", 1: "time"}}
-        if dynamic
-        else None
-    )
+    # Export with static shapes for stability across torch versions
+    # (no dynamic_axes/dynamic_shapes flags as lookback is fixed in configs).
     torch.onnx.export(
         model,
         example_input,
-        out_f=str(out_path),
+        f=str(out_path),
         input_names=["features"],
         output_names=["y_hat"],
         opset_version=opset,
-        dynamic_axes=dynamic_axes,
         do_constant_folding=True,
     )
 

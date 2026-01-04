@@ -2,18 +2,17 @@
 
 ## Description
 
-This project implements a complete machine learning pipeline for **daily temperature forecasting** based on historical climate data.
+This repository implements a complete pipeline for **daily temperature forecasting** from historical climate data.
 
-The main goal of the project is to demonstrate a full MLOps workflow, including:
+It includes:
 
 - data loading and preprocessing,
 - feature engineering,
-- model training,
-- checkpointing,
-- inference on test data,
-- logging of evaluation metrics and visualizations.
+- model training with checkpointing,
+- inference on a held‑out test split,
+- experiment logging with metrics and visualizations.
 
-The project is based on the Kaggle dataset _Daily Climate Time Series Data_ and follows the modeling approach presented in a public Kaggle notebook using an LSTM neural network.
+The model is an LSTM‑based neural network trained on the Kaggle dataset _Daily Climate Time Series Data_ and is inspired by a public Kaggle notebook.
 
 ---
 
