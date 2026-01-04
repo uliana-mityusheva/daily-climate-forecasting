@@ -59,9 +59,9 @@ def _validate_with_onnxruntime(onnx_path: Path, example_input: torch.Tensor) -> 
     sess = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
     inp_name = sess.get_inputs()[0].name
     out_name = sess.get_outputs()[0].name
-    x = example_input.detach().cpu().numpy().astype(np.float32)
-    y = sess.run([out_name], {inp_name: x})[0]
-    print(f"ONNX runtime validation ok. Output shape: {y.shape}")
+    input_array = example_input.detach().cpu().numpy().astype(np.float32)
+    onnx_output = sess.run([out_name], {inp_name: input_array})[0]
+    print(f"ONNX runtime validation ok. Output shape: {onnx_output.shape}")
 
 
 @hydra.main(version_base=None, config_path="../configs", config_name="config")

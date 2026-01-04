@@ -60,27 +60,30 @@ class DataConfig:
 
 class ClimateSeq2SeqDataset(Dataset):
     """
-    X: [lookback, 6]
-    y: [lookback, 1]  (sequence of meantemp)
+    features: [lookback, 6]
+    targets: [lookback, 1]  (sequence of meantemp)
     """
 
-    def __init__(self, X: np.ndarray, y: np.ndarray):
+    def __init__(self, features_seq: np.ndarray, targets_seq: np.ndarray):
         assert (
-            X.ndim == 3 and X.shape[2] == N_FEATURES
-        ), f"X must be [N,T,6], got {X.shape}"
-        assert y.ndim == 3 and y.shape[2] == 1, f"y must be [N,T,1], got {y.shape}"
+            features_seq.ndim == 3 and features_seq.shape[2] == N_FEATURES
+        ), f"features must be [N,T,6], got {features_seq.shape}"
         assert (
-            X.shape[0] == y.shape[0] and X.shape[1] == y.shape[1]
-        ), "X and y must align"
+            targets_seq.ndim == 3 and targets_seq.shape[2] == 1
+        ), f"targets must be [N,T,1], got {targets_seq.shape}"
+        assert (
+            features_seq.shape[0] == targets_seq.shape[0]
+            and features_seq.shape[1] == targets_seq.shape[1]
+        ), "features and targets must align"
 
-        self.X = torch.from_numpy(X.astype(np.float32))
-        self.y = torch.from_numpy(y.astype(np.float32))
+        self.features = torch.from_numpy(features_seq.astype(np.float32))
+        self.targets = torch.from_numpy(targets_seq.astype(np.float32))
 
     def __len__(self) -> int:
-        return self.X.shape[0]
+        return self.features.shape[0]
 
     def __getitem__(self, idx: int):
-        return self.X[idx], self.y[idx]
+        return self.features[idx], self.targets[idx]
 
 
 def _read_raw_df(path: Path) -> pd.DataFrame:
@@ -156,8 +159,8 @@ def create_windows_seq2seq(
     """
     series_scaled: [N, 7] aligned with ALL_COLS, already scaled by MinMaxScaler
     Returns:
-      X: [M, lookback, 6]
-      y: [M, lookback, 1]
+      features: [M, lookback, 6]
+      targets: [M, lookback, 1]
     """
     if series_scaled.ndim != 2 or series_scaled.shape[1] != len(ALL_COLS):
         raise ValueError(
@@ -169,17 +172,17 @@ def create_windows_seq2seq(
     if m <= 0:
         raise ValueError(f"Not enough rows: N={n}, lookback={lookback}")
 
-    X = np.zeros((m, lookback, N_FEATURES), dtype=np.float32)
-    y = np.zeros((m, lookback, 1), dtype=np.float32)
+    features = np.zeros((m, lookback, N_FEATURES), dtype=np.float32)
+    targets = np.zeros((m, lookback, 1), dtype=np.float32)
 
     feat_mat = series_scaled[:, :N_FEATURES]
     targ_vec = series_scaled[:, TARGET_INDEX]
 
     for i in range(m):
-        X[i] = feat_mat[i : i + lookback]
-        y[i, :, 0] = targ_vec[i : i + lookback]
+        features[i] = feat_mat[i : i + lookback]
+        targets[i, :, 0] = targ_vec[i : i + lookback]
 
-    return X, y
+    return features, targets
 
 
 def prepare_datasets(
@@ -222,14 +225,20 @@ def prepare_datasets(
             cfg.processed_dir / cfg.scaler_name,
         )
 
-    X_train, y_train = create_windows_seq2seq(series_scaled[train_sl], cfg.lookback)
-    X_val, y_val = create_windows_seq2seq(series_scaled[val_sl], cfg.lookback)
-    X_test, y_test = create_windows_seq2seq(series_scaled[test_sl], cfg.lookback)
+    features_train, targets_train = create_windows_seq2seq(
+        series_scaled[train_sl], cfg.lookback
+    )
+    features_val, targets_val = create_windows_seq2seq(
+        series_scaled[val_sl], cfg.lookback
+    )
+    features_test, targets_test = create_windows_seq2seq(
+        series_scaled[test_sl], cfg.lookback
+    )
 
     return (
-        ClimateSeq2SeqDataset(X_train, y_train),
-        ClimateSeq2SeqDataset(X_val, y_val),
-        ClimateSeq2SeqDataset(X_test, y_test),
+        ClimateSeq2SeqDataset(features_train, targets_train),
+        ClimateSeq2SeqDataset(features_val, targets_val),
+        ClimateSeq2SeqDataset(features_test, targets_test),
     )
 
 

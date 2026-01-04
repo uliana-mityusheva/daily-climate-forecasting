@@ -79,10 +79,10 @@ def predict_on_test(
 
     # -------- inference --------
     device = next(model.parameters()).device
-    X = torch.from_numpy(X_test).float().to(device)
+    features_tensor = torch.from_numpy(X_test).float().to(device)
 
     y_true_scaled = y_test[:, -1, 0]  # last timestep (numpy)
-    y_hat = model(X)  # [B,T,1]
+    y_hat = model(features_tensor)  # [B,T,1]
     y_pred_scaled = y_hat[:, -1, 0].cpu().numpy()
 
     # -------- inverse transform --------
