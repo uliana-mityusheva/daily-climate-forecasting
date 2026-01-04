@@ -3,6 +3,7 @@ defaults:
   - model: model
   - train: train
   - predict: predict
+  - export: export
   - logging: logging
   - _self_
 

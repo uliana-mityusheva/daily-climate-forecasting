@@ -238,3 +238,6 @@ artifacts/
 # reports / plots (generated artifacts, must not be in git)
 reports/
 plots/
+
+mlflow.db
+outputs/
