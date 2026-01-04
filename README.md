@@ -56,7 +56,21 @@ mkdir -p ../dvc_store
 uv run dvc pull && uv run dvc checkout
 ```
 
-- If the DVC remote is empty/unavailable, train/infer will automatically download the CSV from the public Yandex Disk link on first run.
+- How data fetching works:
+  - Preferred: DVC pulls the raw CSV from the local DVC remote (`../dvc_store`).
+  - If the DVC remote is empty or unavailable, the pipeline (via `dcf get_data`, `dcf train`, or `dcf predict`) will automatically download the CSV from a public Yandex Disk link and save it to `data/raw/daily_climate_data.csv`.
+  - After the first download, you can populate the local DVC remote for future clean runs:
+
+    ```
+    uv run dvc repro
+    uv run dvc push
+    ```
+
+  - On subsequent machines/runs, simply pull from DVC:
+
+    ```
+    uv run dvc pull && uv run dvc checkout
+    ```
 
 Unified CLI
 
