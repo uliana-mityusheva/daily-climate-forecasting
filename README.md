@@ -286,6 +286,8 @@ artifacts/model.onnx
 
 Convert ONNX to TensorRT (requires NVIDIA TensorRT installed; `trtexec` must be in PATH):
 
+> Requires Linux, NVIDIA GPU, CUDA, and TensorRT; not supported on macOS. If not available, skip this step and use ONNX export.
+
 ```
 uv run dcf convert_trt
 ```
