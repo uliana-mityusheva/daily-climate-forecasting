@@ -17,6 +17,66 @@ The project is based on the Kaggle dataset _Daily Climate Time Series Data_ and 
 
 ---
 
+## Project Proposal (Semantic Content)
+
+### Problem Statement
+
+Build a machine learning system that predicts the next-day temperature using historical daily climate data. Accurate short-term temperature forecasting is useful for daily planning, agriculture, energy management, and environmental monitoring.
+
+### Input and Output Data Format
+
+- Input: the model receives a time window of the last T days. Each day contains engineered features used in this repository: month, day, humidity, wind_speed, meanpressure, and humidity_to_pressure ratio (meantemp is the target, not a feature).
+- Output: a single real number — the predicted temperature for the next day, taken as the last time step of the predicted sequence.
+
+### Metrics
+
+- MAE: average absolute error between prediction and actual temperature.
+- RMSE: root mean squared error (penalizes larger errors).
+
+Expected results (guideline):
+
+- MAE: 1.5–2.5 °C
+- RMSE: 2–3 °C
+
+### Validation
+
+Chronological split (no random shuffling):
+
+- Train: earliest part of the series
+- Validation: middle part
+- Test: most recent part (used only for final evaluation)
+
+### Data
+
+Public Kaggle dataset “Daily Climate Time Series Data”:
+
+https://www.kaggle.com/datasets/sumanthvrao/daily-climate-time-series-data
+
+Core features:
+
+- date: day in YYYY-MM-DD
+- meantemp: mean temperature for the day
+- humidity
+- wind_speed (km/h)
+- meanpressure (atm)
+
+Note: data covers 2013–2017, so rare extremes may be underrepresented.
+
+### Modeling
+
+- Main model: LSTM neural network in PyTorch (as implemented in this repository).
+  - 1–2 LSTM layers (hidden size 32–128)
+  - Dropout for regularization
+  - Fully connected layer to output temperature
+  - Loss: MSELoss
+  - Optimizer: Adam
+  - Training: sliding windows of length T, normalization, train on train set, tune on validation set, final evaluate on test set
+  - Inspired by: “Pytorch LSTM Daily Climate Forecasting” Kaggle notebook
+
+### Deployment
+
+The final model is used via CLI commands (see sections below). Inference runs on the internal held-out test split by default and is implemented separately from training. The expected CSV schema for external data is documented in the Infer section and can be supported with a small extension if needed.
+
 ## Setup
 
 This project uses `uv` for environment management and `DVC` for data. Follow these steps on a clean machine:
@@ -47,30 +107,24 @@ uv run pre-commit run -a
 uv run mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns --host 127.0.0.1 --port 8080
 ```
 
-5. Get data (DVC local storage or fallback)
+5. Data fetching (automatic by default)
 
-- Preferred: use DVC to pull data into the workspace
-
-```
-mkdir -p ../dvc_store
-uv run dvc pull && uv run dvc checkout
-```
-
-- How data fetching works:
-  - Preferred: DVC pulls the raw CSV from the local DVC remote (`../dvc_store`).
-  - If the DVC remote is empty or unavailable, the pipeline (via `dcf get_data`, `dcf train`, or `dcf predict`) will automatically download the CSV from a public Yandex Disk link and save it to `data/raw/daily_climate_data.csv`.
-  - After the first download, you can populate the local DVC remote for future clean runs:
+- Default (recommended): skip manual steps and just run training or inference.
+  - `uv run dcf train` or `uv run dcf predict` will first try to read data via DVC (local remote).
+  - If no data is found in DVC, the pipeline automatically downloads the CSV from a public Yandex Disk link into `data/raw/daily_climate_data.csv`.
+  - After this first automatic download, you can populate the local DVC remote for future clean runs:
 
     ```
     uv run dvc repro
     uv run dvc push
     ```
 
-  - On subsequent machines/runs, simply pull from DVC:
+- Optional (if your local DVC remote is already populated): pull data explicitly via DVC before running anything:
 
-    ```
-    uv run dvc pull && uv run dvc checkout
-    ```
+```
+mkdir -p ../dvc_store
+uv run dvc pull && uv run dvc checkout
+```
 
 Unified CLI
 
