@@ -58,6 +58,16 @@ uv run dvc pull && uv run dvc checkout
 
 - If the DVC remote is empty/unavailable, train/infer will automatically download the CSV from the public Yandex Disk link on first run.
 
+Unified CLI
+
+- You can use a single entrypoint for all commands:
+
+```
+uv run dcf <command>
+```
+
+Where `<command>` is one of: `get_data`, `train`, `predict`, `export`, `convert_trt`, `register_model`.
+
 ## Data
 
 The raw dataset is stored in: `data/raw/daily_climate_data.csv`
@@ -120,13 +130,13 @@ Early stopping is applied using a chronological validation set, ensuring that no
 Run end-to-end training (loads data, preprocesses, trains, logs to MLflow, saves checkpoints and plots):
 
 ```
-uv run python -m climate_forecasting.train
+uv run dcf train
 ```
 
 Hydra overrides example (change hyperparameters from CLI):
 
 ```
-uv run python -m climate_forecasting.train \
+uv run dcf train \
   model.hidden_size=128 train.epochs=5 data.lookback=10
 ```
 
@@ -167,7 +177,7 @@ Prediction tables and plots are generated automatically and are not stored in gi
 Run inference on the test split and generate evaluation artifacts:
 
 ```
-uv run python -m climate_forecasting.predict
+uv run dcf predict
 ```
 
 Outputs:
@@ -198,7 +208,7 @@ Example: the raw CSV is stored at `data/raw/daily_climate_data.csv` (via DVC or 
 Export trained model to ONNX:
 
 ```
-uv run python -m climate_forecasting.export
+uv run dcf export
 ```
 
 Output:
@@ -210,7 +220,7 @@ artifacts/model.onnx
 Convert ONNX to TensorRT (requires NVIDIA TensorRT installed; `trtexec` must be in PATH):
 
 ```
-uv run python -m climate_forecasting.convert_trt
+uv run dcf convert_trt
 ```
 
 Output:
@@ -240,8 +250,8 @@ uv run mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-
 2. Ensure ONNX exists, then log the model to MLflow (no registry):
 
 ```
-uv run python -m climate_forecasting.export
-uv run python -m climate_forecasting.register_model serve.register=false
+uv run dcf export
+uv run dcf register_model serve.register=false
 ```
 
 3. Serve the logged model (replace <run_id> from previous step):
@@ -278,7 +288,7 @@ Metrics are saved in machine-readable format: `reports/metrics.json`
 To train the model and save the best checkpoint, run:
 
 ```
-uv run python -m climate_forecasting.train
+uv run dcf train
 ```
 
 The training process includes data preprocessing, model training, validation, and checkpointing.
@@ -291,7 +301,7 @@ The best model is saved to the `artifacts/` directory.
 To run inference on the test split and generate evaluation artifacts, run:
 
 ```
-uv run python -m climate_forecasting.predict
+uv run dcf predict
 ```
 
 After running inference, the following files will be generated automatically:
