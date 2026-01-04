@@ -17,6 +17,47 @@ The project is based on the Kaggle dataset _Daily Climate Time Series Data_ and 
 
 ---
 
+## Setup
+
+This project uses `uv` for environment management and `DVC` for data. Follow these steps on a clean machine:
+
+1. Install uv
+
+```
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+2. Create venv and install dependencies
+
+```
+uv venv .venv
+uv sync
+```
+
+3. Install pre-commit and run checks (should be green)
+
+```
+uv run pre-commit install
+uv run pre-commit run -a
+```
+
+4. Start MLflow tracking server (local)
+
+```
+uv run mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns --host 127.0.0.1 --port 8080
+```
+
+5. Get data (DVC local storage or fallback)
+
+- Preferred: use DVC to pull data into the workspace
+
+```
+mkdir -p ../dvc_store
+uv run dvc pull && uv run dvc checkout
+```
+
+- If the DVC remote is empty/unavailable, train/infer will automatically download the CSV from the public Yandex Disk link on first run.
+
 ## Data
 
 The raw dataset is stored in: `data/raw/daily_climate_data.csv`
@@ -74,6 +115,30 @@ Early stopping is applied using a chronological validation set, ensuring that no
 
 ---
 
+## Train
+
+Run end-to-end training (loads data, preprocesses, trains, logs to MLflow, saves checkpoints and plots):
+
+```
+uv run python -m climate_forecasting.train
+```
+
+Hydra overrides example (change hyperparameters from CLI):
+
+```
+uv run python -m climate_forecasting.train \
+  model.hidden_size=128 train.epochs=5 data.lookback=10
+```
+
+Artifacts produced:
+
+```
+artifacts/model_best.pt
+plots/train_loss.png
+plots/val_loss.png
+plots/val_last_mse.png
+```
+
 ## Inference
 
 Inference is implemented in a separate script and runs **only on the test split**.
@@ -96,6 +161,104 @@ reports/
 Prediction tables and plots are generated automatically and are not stored in git.
 
 ---
+
+## Infer
+
+Run inference on the test split and generate evaluation artifacts:
+
+```
+uv run python -m climate_forecasting.predict
+```
+
+Outputs:
+
+```
+reports/metrics.json
+reports/test_predictions.csv
+reports/test_predictions.png
+plots/test_predictions.png
+```
+
+Input data format (CSV columns expected):
+
+- `date` (YYYY-MM-DD)
+- `meantemp` (target)
+- `humidity`
+- `wind_speed`
+- `meanpressure`
+
+The pipeline performs feature engineering (month, day, ratio) internally.
+
+Example: the raw CSV is stored at `data/raw/daily_climate_data.csv` (via DVC or downloaded from the public link on first run).
+
+---
+
+## Production Preparation
+
+Export trained model to ONNX:
+
+```
+uv run python -m climate_forecasting.export
+```
+
+Output:
+
+```
+artifacts/model.onnx
+```
+
+Convert ONNX to TensorRT (requires NVIDIA TensorRT installed; `trtexec` must be in PATH):
+
+```
+uv run python -m climate_forecasting.convert_trt
+```
+
+Output:
+
+```
+artifacts/model.trt
+```
+
+Delivery artifacts (for deployment):
+
+- `artifacts/model_best.pt` (weights + configs for offline usage)
+- `artifacts/model.onnx` (portable inference format)
+- `artifacts/model.trt` (TensorRT engine; optional, GPU optimized)
+- `data/processed/minmax_scaler.joblib` (scaler and metadata)
+- Configs under `configs/` (Hydra YAMLs)
+
+---
+
+## Serving (MLflow Serving)
+
+1. Start MLflow tracking server (if not running):
+
+```
+uv run mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns --host 127.0.0.1 --port 8080
+```
+
+2. Ensure ONNX exists, then log the model to MLflow (no registry):
+
+```
+uv run python -m climate_forecasting.export
+uv run python -m climate_forecasting.register_model serve.register=false
+```
+
+3. Serve the logged model (replace <run_id> from previous step):
+
+```
+mlflow models serve -m "runs:/<run_id>/model" -p 5005 --no-conda
+```
+
+4. Invoke with HTTP (example payload; shape [1, lookback=7, features=6]):
+
+```
+curl -X POST http://127.0.0.1:5005/invocations \
+  -H "Content-Type: application/json" \
+  -d '{"inputs": {"features": [[[0,0,0,0,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0]]]}}'
+```
+
+Note: to get meaningful predictions, pass scaled features consistent with the training scaler.
 
 ## Metrics
 
