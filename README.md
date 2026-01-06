@@ -123,6 +123,10 @@ uv run mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-
 
 5. Data fetching (automatic by default)
 
+The dataset is not downloaded via a separate command by default. Instead,
+training and inference ensure that the required data is available before
+running.
+
 - Default (recommended): skip manual steps and just run training or inference.
 
   - `uv run dcf train` or `uv run dcf predict` will first try to read data via
