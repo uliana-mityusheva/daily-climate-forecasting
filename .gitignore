@@ -199,6 +199,16 @@ cython_debug/
 #  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
+
+# Project data & artifacts (do not track in git)
+data/raw/*.csv
+data/processed/*.joblib
+artifacts/
+mlruns/
+mlflow.db
+node_modules/
+outputs/
+plots/
 .cursorindexingignore
 
 # Marimo
