@@ -1,0 +1,26 @@
+schema: '2.0'
+stages:
+  download:
+    cmd: uv run python -m climate_forecasting.get_data
+    deps:
+    - path: climate_forecasting/data_download.py
+      hash: md5
+      md5: 4530c6a094860de257326595ba8cb041
+      size: 2300
+    - path: climate_forecasting/get_data.py
+      hash: md5
+      md5: 3c81900d96b8df213aad86c174098477
+      size: 1555
+    - path: configs/config.yaml
+      hash: md5
+      md5: e0cd595739b3430c2ea579d20ee917fd
+      size: 199
+    - path: configs/data/data.yaml
+      hash: md5
+      md5: fcab3c32cadc988fd782ce7176e55373
+      size: 399
+    outs:
+    - path: data/raw/daily_climate_data.csv
+      hash: md5
+      md5: 3b585794c5df8e6ca55145b51dce4130
+      size: 85205

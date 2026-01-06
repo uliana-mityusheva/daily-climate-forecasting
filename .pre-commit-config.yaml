@@ -1,0 +1,67 @@
+default_language_version:
+  python: python3.12
+
+repos:
+  # -------------------------
+  # pre-commit meta hooks
+  # -------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-case-conflict
+      - id: mixed-line-ending
+
+  # -------------------------
+  # Black (Python formatter)
+  # -------------------------
+  - repo: https://github.com/psf/black
+    rev: 24.4.2
+    hooks:
+      - id: black
+
+  # -------------------------
+  # isort (imports)
+  # -------------------------
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ["--profile", "black"]
+
+  # -------------------------
+  # flake8 (linting)
+  # -------------------------
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.1.1
+    hooks:
+      - id: flake8
+        additional_dependencies: [flake8-bugbear]
+
+  # -------------------------
+  # nbQA (lint/format notebooks)
+  # -------------------------
+  - repo: https://github.com/nbQA-dev/nbQA
+    rev: 1.7.1
+    hooks:
+      - id: nbqa-black
+        additional_dependencies: [black==24.4.2]
+      - id: nbqa-isort
+        additional_dependencies: [isort==5.13.2]
+      - id: nbqa-flake8
+        additional_dependencies: [flake8==7.1.1]
+
+  # -------------------------
+  # Prettier (NOT Python)
+  # -------------------------
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.1.0
+    hooks:
+      - id: prettier
+        types_or: [markdown, yaml, toml, json, dockerfile, shell]
+        additional_dependencies: ["prettier@3.1.0", "prettier-plugin-sh@0.13.1"]
+        args: [--print-width=80, --prose-wrap=always]

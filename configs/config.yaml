@@ -1,0 +1,9 @@
+defaults:
+  - data: data
+  - model: model
+  - train: train
+  - predict: predict
+  - export: export
+  - logging: logging
+  - serve: serve
+  - _self_

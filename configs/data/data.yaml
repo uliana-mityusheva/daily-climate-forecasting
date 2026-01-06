@@ -1,0 +1,21 @@
+raw_path: data/raw/daily_climate_data.csv
+data_url: "https://disk.360.yandex.ru/d/8K8JWqynAo7XvA"
+processed_dir: data/processed
+
+# DVC integration
+use_dvc: true
+dvc_repo: "."
+dvc_path: data/raw/daily_climate_data.csv
+dvc_rev: null
+
+lookback: 7
+train_ratio: 0.8
+val_ratio: 0.1
+
+batch_size: 32
+num_workers: 0
+pin_memory: false
+shuffle_train: false
+
+save_scaler: true
+scaler_name: minmax_scaler.joblib
