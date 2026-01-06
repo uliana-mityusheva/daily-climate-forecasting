@@ -29,6 +29,9 @@ TARGET_COL = COL_TARGET  # 1
 TARGET_INDEX = ALL_COLS.index(TARGET_COL)  # 6
 N_FEATURES = len(FEATURE_COLS)  # 6
 
+# Defaults used in function parameters (avoid calls in defaults per flake8-bugbear B008)
+DEFAULT_PROCESSED_DIR = Path("data/processed")
+
 
 @dataclass(frozen=True)
 class DataConfig:
@@ -105,7 +108,6 @@ def _read_raw_df(path: Path) -> pd.DataFrame:
 def _feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
-    # Extract month/day from date
     df[COL_MONTH] = df[DATE_COL].dt.month.astype(np.int64)
     df[COL_DAY] = df[DATE_COL].dt.day.astype(np.int64)
 
@@ -273,9 +275,11 @@ def create_dataloaders(cfg: DataConfig) -> Tuple[DataLoader, DataLoader, DataLoa
 
 
 def load_scaler(
-    processed_dir: Path = Path("data/processed"),
+    processed_dir: Path | None = None,
     scaler_name: str = "minmax_scaler.joblib",
 ) -> Dict[str, Any]:
+    if processed_dir is None:
+        processed_dir = DEFAULT_PROCESSED_DIR
     path = processed_dir / scaler_name
     if not path.exists():
         raise FileNotFoundError(f"Scaler not found: {path}")

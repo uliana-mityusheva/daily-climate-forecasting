@@ -28,7 +28,6 @@ dcf = "climate_forecasting.commands:main"
 dev = [
     "pre-commit>=4.5.1",
     "pytest>=9.0.2",
-    "ruff>=0.14.10",
 ]
 
 [build-system]

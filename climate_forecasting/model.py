@@ -24,9 +24,9 @@ class ClimateLSTM(nn.Module):
       y_hat: [B, T, 1]
     """
 
-    def __init__(self, cfg: ModelConfig = ModelConfig()):
+    def __init__(self, cfg: ModelConfig | None = None):
         super().__init__()
-        self.cfg = cfg
+        self.cfg = cfg or ModelConfig()
 
         self.lstm = nn.LSTM(
             input_size=cfg.input_size,

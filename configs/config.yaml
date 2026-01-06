@@ -7,5 +7,3 @@ defaults:
   - logging: logging
   - serve: serve
   - _self_
-
-# Global config anchor for future extensions (logging/serve, etc.)

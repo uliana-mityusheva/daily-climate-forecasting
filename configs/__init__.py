@@ -1,1 +1,1 @@
-# Enables Hydra to treat 'configs' as a package when discovering configs.
+# Enables Hydra to treat 'configs' as a package for config discovery.

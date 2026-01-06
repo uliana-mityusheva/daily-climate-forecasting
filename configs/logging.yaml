@@ -1,5 +1,0 @@
-# MLflow logging configuration
-tracking_uri: http://127.0.0.1:8080
-experiment_name: daily-climate-forecasting
-run_name: train
-plots_dir: plots
