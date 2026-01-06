@@ -209,6 +209,7 @@ mlflow.db
 node_modules/
 outputs/
 plots/
+reports/
 .cursorindexingignore
 
 # Marimo
