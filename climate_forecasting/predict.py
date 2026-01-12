@@ -71,19 +71,19 @@ def predict_on_test(
     series_scaled = scaler.transform(series).astype(np.float32)
 
     # time split (same logic as training)
-    n = len(series_scaled)
-    val_end = int(n * (cfg.train_ratio + cfg.val_ratio))
+    num_rows = len(series_scaled)
+    val_end = int(num_rows * (cfg.train_ratio + cfg.val_ratio))
     test_scaled = series_scaled[val_end:]
 
-    X_test, y_test = create_windows_seq2seq(test_scaled, cfg.lookback)
+    features_test, targets_test = create_windows_seq2seq(test_scaled, cfg.lookback)
 
     # -------- inference --------
     device = next(model.parameters()).device
-    features_tensor = torch.from_numpy(X_test).float().to(device)
+    features_tensor = torch.from_numpy(features_test).float().to(device)
 
-    y_true_scaled = y_test[:, -1, 0]  # last timestep (numpy)
-    y_hat = model(features_tensor)  # [B,T,1]
-    y_pred_scaled = y_hat[:, -1, 0].cpu().numpy()
+    y_true_scaled = targets_test[:, -1, 0]  # last timestep (numpy)
+    predicted_tensor = model(features_tensor)  # [B,T,1]
+    y_pred_scaled = predicted_tensor[:, -1, 0].cpu().numpy()
 
     # -------- inverse transform --------
     # reference rows: last row of each window

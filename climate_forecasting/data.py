@@ -126,7 +126,7 @@ def _feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _time_splits(
-    n: int, train_ratio: float, val_ratio: float
+    num_rows: int, train_ratio: float, val_ratio: float
 ) -> Tuple[slice, slice, slice]:
     if not (0 < train_ratio < 1):
         raise ValueError("train_ratio must be in (0,1)")
@@ -135,16 +135,20 @@ def _time_splits(
     if train_ratio + val_ratio >= 1:
         raise ValueError("train_ratio + val_ratio must be < 1")
 
-    train_end = int(n * train_ratio)
-    val_end = int(n * (train_ratio + val_ratio))
+    train_end = int(num_rows * train_ratio)
+    val_end = int(num_rows * (train_ratio + val_ratio))
 
-    return slice(0, train_end), slice(train_end, val_end), slice(val_end, n)
+    return (
+        slice(0, train_end),
+        slice(train_end, val_end),
+        slice(val_end, num_rows),
+    )
 
 
-def _ensure_enough_rows(name: str, n: int, lookback: int) -> None:
-    if n < lookback:
+def _ensure_enough_rows(name: str, num_rows: int, lookback: int) -> None:
+    if num_rows < lookback:
         raise ValueError(
-            f"{name} split too small for lookback={lookback}: n={n}. "
+            f"{name} split too small for lookback={lookback}: n={num_rows}. "
             f"Increase split size or reduce lookback."
         )
 
@@ -169,20 +173,20 @@ def create_windows_seq2seq(
             f"Expected [N,7] array aligned with ALL_COLS, got {series_scaled.shape}"
         )
 
-    n = series_scaled.shape[0]
-    m = n - lookback + 1
-    if m <= 0:
-        raise ValueError(f"Not enough rows: N={n}, lookback={lookback}")
+    num_rows = series_scaled.shape[0]
+    num_windows = num_rows - lookback + 1
+    if num_windows <= 0:
+        raise ValueError(f"Not enough rows: N={num_rows}, lookback={lookback}")
 
-    features = np.zeros((m, lookback, N_FEATURES), dtype=np.float32)
-    targets = np.zeros((m, lookback, 1), dtype=np.float32)
+    features = np.zeros((num_windows, lookback, N_FEATURES), dtype=np.float32)
+    targets = np.zeros((num_windows, lookback, 1), dtype=np.float32)
 
-    feat_mat = series_scaled[:, :N_FEATURES]
-    targ_vec = series_scaled[:, TARGET_INDEX]
+    feature_matrix = series_scaled[:, :N_FEATURES]
+    target_vector = series_scaled[:, TARGET_INDEX]
 
-    for i in range(m):
-        features[i] = feat_mat[i : i + lookback]
-        targets[i, :, 0] = targ_vec[i : i + lookback]
+    for start_index in range(num_windows):
+        features[start_index] = feature_matrix[start_index : start_index + lookback]
+        targets[start_index, :, 0] = target_vector[start_index : start_index + lookback]
 
     return features, targets
 
@@ -194,7 +198,7 @@ def prepare_datasets(
     df = _feature_engineering(df)
 
     required = (COL_HUM, COL_WIND, COL_PRESS, COL_TARGET)
-    missing = [c for c in required if c not in df.columns]
+    missing = [column_name for column_name in required if column_name not in df.columns]
     if missing:
         raise ValueError(
             f"Missing required columns: {missing}. Available: {df.columns.tolist()}"
@@ -300,14 +304,16 @@ def inverse_transform_meantemp(
     Convert meantemp from scaled [0,1] back to original units (°C),
     when scaler was fit on ALL_COLS (7-dim).
     """
-    mt = meantemp_scaled.reshape(-1)
-    ref = np.asarray(reference_scaled_rows, dtype=np.float32).copy()
+    meantemp_flat = meantemp_scaled.reshape(-1)
+    reference_rows = np.asarray(reference_scaled_rows, dtype=np.float32).copy()
 
-    if ref.ndim != 2 or ref.shape[1] != len(ALL_COLS):
-        raise ValueError(f"reference_scaled_rows must be [K,7], got {ref.shape}")
-    if ref.shape[0] != mt.shape[0]:
+    if reference_rows.ndim != 2 or reference_rows.shape[1] != len(ALL_COLS):
+        raise ValueError(
+            f"reference_scaled_rows must be [K,7], got {reference_rows.shape}"
+        )
+    if reference_rows.shape[0] != meantemp_flat.shape[0]:
         raise ValueError("reference rows count must match meantemp values count")
 
-    ref[:, TARGET_INDEX] = mt
-    inv = scaler.inverse_transform(ref)
-    return inv[:, TARGET_INDEX]
+    reference_rows[:, TARGET_INDEX] = meantemp_flat
+    unscaled_values = scaler.inverse_transform(reference_rows)
+    return unscaled_values[:, TARGET_INDEX]

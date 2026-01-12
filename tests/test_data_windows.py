@@ -9,28 +9,28 @@ from climate_forecasting.data import (
 
 
 def test_create_windows_seq2seq_shapes_and_alignment():
-    n = 10
+    num_rows = 10
     lookback = 5
 
     # Construct a scaled series [N,7] aligned with ALL_COLS
-    series = np.zeros((n, len(ALL_COLS)), dtype=np.float32)
+    series = np.zeros((num_rows, len(ALL_COLS)), dtype=np.float32)
 
     # Fill features with increasing values per feature for determinism
-    for j in range(N_FEATURES):
-        series[:, j] = np.arange(n, dtype=np.float32) + j
+    for feature_index in range(N_FEATURES):
+        series[:, feature_index] = np.arange(num_rows, dtype=np.float32) + feature_index
 
     # Target is separate pattern
-    target = np.arange(n, dtype=np.float32) * 10.0
+    target = np.arange(num_rows, dtype=np.float32) * 10.0
     series[:, TARGET_INDEX] = target
 
     features, targets = create_windows_seq2seq(series, lookback)
 
-    # m = n - lookback + 1
-    m = n - lookback + 1
-    assert features.shape == (m, lookback, N_FEATURES)
-    assert targets.shape == (m, lookback, 1)
+    # number of windows
+    num_windows = num_rows - lookback + 1
+    assert features.shape == (num_windows, lookback, N_FEATURES)
+    assert targets.shape == (num_windows, lookback, 1)
 
     # Check target alignment: each window's target equals slice of the target vector
-    for i in range(m):
-        expected = target[i : i + lookback]
-        np.testing.assert_allclose(targets[i, :, 0], expected)
+    for start_index in range(num_windows):
+        expected = target[start_index : start_index + lookback]
+        np.testing.assert_allclose(targets[start_index, :, 0], expected)

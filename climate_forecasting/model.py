@@ -40,11 +40,11 @@ class ClimateLSTM(nn.Module):
         lstm_out = cfg.hidden_size * (2 if cfg.bidirectional else 1)
         self.fc = nn.Linear(lstm_out, cfg.out_size)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
         """
-        x: [B, T, F]
+        features: [B, T, F]
         return: [B, T, 1]
         """
-        out, _ = self.lstm(x)  # [B, T, H]
+        out, _ = self.lstm(features)  # [B, T, H]
         y_hat = self.fc(out)  # [B, T, 1]
         return y_hat

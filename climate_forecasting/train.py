@@ -35,12 +35,12 @@ class TrainConfig:
     early_stopping_patience: int = 10
 
 
-def _to_jsonable(d: dict) -> dict:
+def _to_jsonable(data: dict) -> dict:
     """Convert Path values to str
     so checkpoint is safe to unpickle across torch versions."""
     out = {}
-    for k, v in d.items():
-        out[k] = str(v) if isinstance(v, Path) else v
+    for key, value in data.items():
+        out[key] = str(value) if isinstance(value, Path) else value
     return out
 
 
@@ -66,10 +66,10 @@ def save_checkpoint(
     torch.save(payload, path)
 
     json_path = path.with_suffix(".json")
-    with open(json_path, "w", encoding="utf-8") as f:
+    with open(json_path, "w", encoding="utf-8") as fout:
         json.dump(
             {"model_cfg": payload["model_cfg"], "data_cfg": payload["data_cfg"]},
-            f,
+            fout,
             indent=2,
             ensure_ascii=False,
         )
@@ -89,8 +89,8 @@ class LSTMModule(pl.LightningModule):
         self.train_last_mse_hist = []
         self.val_last_mse_hist = []
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.model(x)
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        return self.model(features)
 
     def training_step(self, batch, batch_idx: int):
         features, targets = batch
