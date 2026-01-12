@@ -123,8 +123,9 @@ uv run mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-
 
 5. Data fetching (automatic by default)
 
-   The dataset is not downloaded via a separate command by default.
-   Instead, training and inference ensure that the required data is available before running.
+   The dataset is not downloaded via a separate command by default. Instead,
+   training and inference ensure that the required data is available before
+   running.
 
 - Default (recommended): skip manual steps and just run training or inference.
 
@@ -171,7 +172,7 @@ uv run pre-commit install
 uv run pre-commit run -a
 ```
 
-- Tests: run pytest locally (repo currently has placeholder test directory)
+- Tests: run pytest locally
 
 ```
 uv run pytest -v
@@ -227,7 +228,7 @@ trained weights in a checkpoint file.
 
 ## Training
 
-Model training is implemented using PyTorch.
+Model training is implemented using PyTorch Lightning.
 
 Training details:
 
@@ -383,15 +384,18 @@ uv run dcf register_model serve.register=false
 3. Serve the logged model (replace <run_id> from previous step):
 
 ```
-mlflow models serve -m "runs:/<run_id>/model" -p 5005 --no-conda
+uv run mlflow models serve -m "runs:/<run_id>/model" -p 5005 --no-conda
 ```
 
-4. Invoke with HTTP (example payload; shape [1, lookback=7, features=6]):
+4. Invoke with HTTP
+
+Note: shape is [1, lookback, 6]; lookback defaults to 7 (see
+`configs/data/data.yaml`).
 
 ```
 curl -X POST http://127.0.0.1:5005/invocations \
   -H "Content-Type: application/json" \
-  -d '{"inputs": {"features": [[[0,0,0,0,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0]]]}}'
+  -d '{"inputs": {"features": [[[0.0,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,0.0]]]}}'
 ```
 
 Note: to get meaningful predictions, pass scaled features consistent with the
